@@ -1,19 +1,14 @@
-using MauiAsyncViewsDemo.Views;
-
 namespace MauiAsyncViewsDemo;
 
 public sealed class App : Application
 {
-    private readonly IServiceProvider _services;
+    private readonly AppShell _shell;
 
-    public App(IServiceProvider services)
+    public App(AppShell shell)
     {
-        _services = services;
+        _shell = shell;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
-    {
-        var dashboard = _services.GetRequiredService<DashboardPage>();
-        return new Window(new NavigationPage(dashboard));
-    }
+        => new(_shell);
 }

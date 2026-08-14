@@ -17,24 +17,24 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        // Repository - w realnej aplikacji może to być SQLite/API/EF Core.
         builder.Services.AddSingleton<ICustomerRepository, FakeCustomerRepository>();
         builder.Services.AddSingleton<ITaskRepository, FakeTaskRepository>();
         builder.Services.AddSingleton<IAppointmentRepository, FakeAppointmentRepository>();
+        builder.Services.AddSingleton<IHeavyDataRepository, FakeHeavyDataRepository>();
 
-        // Child ViewModels. Transient jest OK, ponieważ child View jest tworzony raz
-        // i przechowuje swoją instancję ViewModelu.
         builder.Services.AddTransient<CustomersViewModel>();
         builder.Services.AddTransient<TasksViewModel>();
         builder.Services.AddTransient<AppointmentsViewModel>();
+        builder.Services.AddTransient<HeavyDataPopupViewModel>();
 
-        // Child Views.
         builder.Services.AddTransient<CustomersView>();
         builder.Services.AddTransient<TasksView>();
         builder.Services.AddTransient<AppointmentsView>();
+        builder.Services.AddTransient<HeavyDataPopupView>();
 
-        // Pages.
+        builder.Services.AddTransient<StartPage>();
         builder.Services.AddTransient<DashboardPage>();
+        builder.Services.AddSingleton<AppShell>();
 
         return builder.Build();
     }
