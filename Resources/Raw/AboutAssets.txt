@@ -1,0 +1,1 @@
+This directory is mapped as MauiAsset in the project file.
