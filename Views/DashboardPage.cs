@@ -8,31 +8,43 @@ public sealed class DashboardPage : ContentPage
     private readonly TasksView _tasksView;
     private readonly CustomersView _customersView;
     private readonly HeavyDataPopupView _heavyDataPopup;
+    private readonly NavigationTransitionOverlay _transition = new();
 
+    private readonly Grid _dashboard;
     private CancellationTokenSource? _pageCts;
     private bool _initializationStarted;
+    private int _navigatingBack;
 
     public DashboardPage(IServiceProvider services)
     {
         Title = "Dashboard";
 
-        // DI tworzy drzewo widoków, ale żaden konstruktor nie pobiera danych.
         _appointmentsView = services.GetRequiredService<AppointmentsView>();
         _tasksView = services.GetRequiredService<TasksView>();
         _customersView = services.GetRequiredService<CustomersView>();
         _heavyDataPopup = services.GetRequiredService<HeavyDataPopupView>();
 
-        Content = BuildLayout();
+        _dashboard = BuildDashboard();
+
+        // Strona docelowa zaczyna lekko przezroczysta i powiększa się do 1.0.
+        _dashboard.Opacity = 0;
+        _dashboard.Scale = 0.985;
+
+        Content = new Grid
+        {
+            Children =
+            {
+                _dashboard,
+                _heavyDataPopup,
+                _transition
+            }
+        };
     }
 
-    private View BuildLayout()
+    private Grid BuildDashboard()
     {
         var backButton = new Button { Text = "← Start" };
-        backButton.Clicked += async (_, _) =>
-        {
-            CancelAllLoading();
-            await Shell.Current.GoToAsync("//start", animate: true);
-        };
+        backButton.Clicked += BackToStartAsync;
 
         var popupButton = new Button
         {
@@ -50,7 +62,7 @@ public sealed class DashboardPage : ContentPage
             await StartLoadingAsync();
         };
 
-        var dashboard = new Grid
+        return new Grid
         {
             Padding = 18,
             RowDefinitions =
@@ -93,7 +105,7 @@ public sealed class DashboardPage : ContentPage
                                 },
                                 new Label
                                 {
-                                    Text = "Shell pokazuje stronę od razu, a dane child viewów startują dopiero po OnAppearing."
+                                    Text = "Dashboard najpierw wykonuje fade-in, potem dopiero uruchamia LoadData child ViewModeli."
                                 }
                             }
                         }.Column(1),
@@ -112,38 +124,67 @@ public sealed class DashboardPage : ContentPage
                 }.Row(2).ColumnSpan(2)
             }
         };
-
-        // Overlay jest już częścią drzewa UI. Jego pokazanie nie wymaga tworzenia
-        // całego widoku ani pobrania danych.
-        return new Grid
-        {
-            Children =
-            {
-                dashboard,
-                _heavyDataPopup
-            }
-        };
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
 
+        _transition.StopAnimation();
+        _transition.IsVisible = false;
+
+        // Najpierw animujemy wejście strony. To nie zależy od danych.
+        _dashboard.Opacity = 0;
+        _dashboard.Scale = 0.985;
+
+        await Task.WhenAll(
+            _dashboard.FadeToAsync(1, 180, Easing.CubicOut),
+            _dashboard.ScaleToAsync(1, 180, Easing.CubicOut));
+
         if (_initializationStarted)
             return;
 
         _initializationStarted = true;
 
-        // Shell kończy przejście i ma szansę narysować Dashboard.
+        // Dopiero po pokazaniu strony rozpoczynamy pobieranie danych.
         await Task.Yield();
         await StartLoadingAsync();
     }
 
     protected override void OnDisappearing()
     {
+        _transition.StopAnimation();
         CancelAllLoading();
         _heavyDataPopup.ViewModel.Cancel();
         base.OnDisappearing();
+    }
+
+    private async void BackToStartAsync(object? sender, EventArgs e)
+    {
+        if (Interlocked.Exchange(ref _navigatingBack, 1) == 1)
+            return;
+
+        try
+        {
+            CancelAllLoading();
+
+            // Tu dla porównania używamy klasycznego ActivityIndicator.
+            await _transition.ShowAsync("Powrót do strony startowej…", useSpinner: true);
+
+            await Task.WhenAll(
+                _dashboard.FadeToAsync(0.65, 100, Easing.CubicIn),
+                _dashboard.ScaleToAsync(0.985, 100, Easing.CubicIn));
+
+            await Shell.Current.GoToAsync("//start", animate: false);
+        }
+        catch
+        {
+            await _transition.HideAsync();
+            _dashboard.Opacity = 1;
+            _dashboard.Scale = 1;
+            Volatile.Write(ref _navigatingBack, 0);
+            throw;
+        }
     }
 
     private async Task StartLoadingAsync()
@@ -155,13 +196,11 @@ public sealed class DashboardPage : ContentPage
 
         try
         {
-            // Widoczny / najważniejszy fragment jako pierwszy.
             await _appointmentsView.ViewModel.InitializeAsync(ct);
             ct.ThrowIfCancellationRequested();
 
             await Task.Yield();
 
-            // Niezależne źródła danych dopiero później.
             await Task.WhenAll(
                 _tasksView.ViewModel.InitializeAsync(ct),
                 _customersView.ViewModel.InitializeAsync(ct));
