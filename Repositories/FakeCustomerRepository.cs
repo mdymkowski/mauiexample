@@ -23,7 +23,7 @@ public sealed class FakeCustomerRepository : ICustomerRepository
             .Select(i => new CustomerModel(
                 Guid.NewGuid(),
                 $"Klient {i:0000}",
-                i % 3 switch
+                (i % 3) switch
                 {
                     0 => "Poznań",
                     1 => "Warszawa",
